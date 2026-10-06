@@ -72,12 +72,19 @@ nav button{flex:1;border:0;border-right:2px solid var(--line);min-height:56px;fo
 nav button:last-child{border-right:0}
 nav button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 [hidden]{display:none!important}
+.prof{margin:0 0 20px}
+.prof label{font-weight:600}
+.week button.day{border:0;padding:0;min-height:0;background:none;font-weight:400}
+.week button.day.sel .dot{outline:3px solid var(--ink);outline-offset:2px}
+.cal .pm{background:var(--bg);color:var(--ink);font-size:11px;font-weight:600;padding:0 3px}
+.prac{margin:8px 0 0;font-weight:600}
 </style>
 </head>
 <body>
 <main>
 <h1>HIP HOP ALL STARS</h1>
 <p class="sub">Practice, show up, level up.</p>
+<div class="row prof"><label for="profSel">Profile</label><select id="profSel"></select><button id="profNew" class="x">New</button><button id="profRen" class="x">Rename</button><button id="profDel" class="x">Delete</button></div>
 
 <section id="practice">
 <div class="card">
@@ -87,6 +94,7 @@ nav button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 <div class="row"><button id="timerBtn" class="solid">Start practice timer</button><span id="clock" aria-live="off">0:00</span></div>
 <div class="row" style="margin-top:12px"><input id="mins" type="number" min="1" max="600" placeholder="Minutes" aria-label="Minutes practiced"><button id="addMins">Add minutes</button></div>
 <div class="week" id="week"></div>
+<p id="weekInfo" class="prac" role="status">Tap a day to see how long you practiced.</p>
 <div class="row" style="margin-top:12px"><button id="report">Email practice report</button></div>
 <div id="reportBox" hidden style="margin-top:12px"><p id="toLine" style="margin:0 0 8px"></p><textarea id="reportText" readonly rows="10" aria-label="Practice report" style="width:100%;font:inherit;color:var(--ink);background:var(--bg);border:2px solid var(--line);padding:10px"></textarea><div class="row" style="margin-top:8px"><button id="copyRep" class="solid">Copy report</button><a id="mailLink" class="btnlink" href="#" target="_blank" rel="noopener noreferrer">Open email app</a></div><p id="copyMsg" role="status" style="margin:8px 0 0"></p></div>
 </div>
@@ -103,6 +111,7 @@ nav button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 <div class="cal" id="cal"></div>
 <div class="row" style="margin-top:12px"><span class="tag Lesson">Lesson</span><span class="tag Performance">Performance</span><span class="tag Practice">Practice</span><span class="tag Important">Important</span></div>
 <h2 id="dTitle" style="margin:16px 0 0"></h2>
+<p id="dPrac" class="prac"></p>
 <ul id="dayList"></ul>
 <div class="row" style="margin-top:12px"><button id="addOnDay" class="solid">Add event on this day</button></div>
 </div>
@@ -145,9 +154,16 @@ nav button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 </nav>
 <script>
 var GOAL=15,$=function(s){return document.querySelector(s)};
-function load(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v||d}catch(e){return d}}
-function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
-var log=load('hhas-log',{}),events=load('hhas-ev',[]),vids=load('hhas-vid',[]),tracks=load('hhas-trk',[]);
+function rawLoad(k,d){try{var v=JSON.parse(localStorage.getItem(k));return v||d}catch(e){return d}}
+function rawSave(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+var profiles=rawLoad('hhas-profiles',[{id:'main',name:'Me'}]),cur=rawLoad('hhas-cur','main');
+if(!profiles.some(function(p){return p.id===cur}))cur=profiles[0].id;
+function pk(k){return cur==='main'?k:k+':'+cur}
+function load(k,d){return rawLoad(pk(k),d)}
+function save(k,v){rawSave(pk(k),v)}
+var log,events,vids,tracks;
+function loadAll(){log=load('hhas-log',{});events=load('hhas-ev',[]);vids=load('hhas-vid',[]);tracks=load('hhas-trk',[])}
+loadAll();
 function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function back(n){var d=new Date();d.setDate(d.getDate()-n);return ymd(d)}
 function el(t,txt,cls){var e=document.createElement(t);if(txt!=null)e.textContent=txt;if(cls)e.className=cls;return e}
@@ -160,19 +176,24 @@ days.forEach(function(k){var d=new Date(k+'T00:00');
 run=(prev&&Math.round((d-prev)/864e5)===1)?run+1:1;prev=d;if(run>best)best=run});
 return {cur:cur,best:Math.max(best,cur)}}
 
+var weekSel=null;
 function renderPractice(){
 var t=log[back(0)]||0,s=streaks();
 $('#today').textContent=t;
 $('#goalmsg').textContent=t>=GOAL?'Goal hit. Nice work today.':(GOAL-t)+' more minutes to hit today\'s goal.';
 $('#streak').textContent=s.cur;
 var w=$('#week');w.textContent='';
-for(var i=6;i>=0;i--){var k=back(i),m=log[k]||0,d=new Date(k+'T00:00'),c=el('div',null,'day');
+for(var i=6;i>=0;i--){(function(k){var m=log[k]||0,d=new Date(k+'T00:00'),c=el('button',null,'day'+(k===weekSel?' sel':''));
+c.setAttribute('aria-label',d.toLocaleDateString(undefined,{weekday:'long'})+', '+m+' minutes');
 c.appendChild(el('div',null,'dot'+(m>=GOAL?' full':m>0?' part':'')));
-c.appendChild(el('span',d.toLocaleDateString(undefined,{weekday:'short'})));w.appendChild(c)}
+c.appendChild(el('span',d.toLocaleDateString(undefined,{weekday:'short'})));
+c.onclick=function(){weekSel=k;renderPractice()};w.appendChild(c)})(back(i))}
+if(weekSel){var wm=log[weekSel]||0;$('#weekInfo').textContent=new Date(weekSel+'T00:00').toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'})+': '+(wm?wm+' min practiced':'no practice logged')}
+else $('#weekInfo').textContent='Tap a day to see how long you practiced.';
 var b=$('#badges');b.textContent='';
 [3,7,14,30].forEach(function(n){b.appendChild(el('span',n+' days'+(s.best>=n?' earned':' locked'),'badge'+(s.best>=n?' on':'')))})}
 
-function addMinutes(n){if(!(n>0))return;var k=back(0);log[k]=(log[k]||0)+n;save('hhas-log',log);renderPractice()}
+function addMinutes(n){if(!(n>0))return;var k=back(0);log[k]=(log[k]||0)+n;save('hhas-log',log);renderPractice();renderCal();renderDay()}
 $('#addMins').onclick=function(){var v=parseInt($('#mins').value,10);if(v>0){addMinutes(v);$('#mins').value=''}};
 var timer=null,startAt=0;
 $('#timerBtn').onclick=function(){
@@ -191,13 +212,14 @@ var c=$('#cal');c.textContent='';
 var first=new Date(vy,vm,1).getDay(),n=new Date(vy,vm+1,0).getDate(),i;
 for(i=0;i<first;i++)c.appendChild(el('button',null,'blank'));
 for(i=1;i<=n;i++){(function(day){var ds=ymd(new Date(vy,vm,day)),ev=events.filter(function(e){return occursOn(e,ds)}),
-b=el('button',null,(ds===back(0)?'today ':'')+(ds===sel?'sel':''));b.appendChild(el('span',day,'n'));
-b.setAttribute('aria-label',new Date(ds+'T00:00').toLocaleDateString(undefined,{month:'long',day:'numeric'})+', '+ev.length+' events');
+pm=log[ds]||0,b=el('button',null,(ds===back(0)?'today ':'')+(ds===sel?'sel':''));b.appendChild(el('span',day,'n'));if(pm)b.appendChild(el('span',pm+'m','pm'));
+b.setAttribute('aria-label',new Date(ds+'T00:00').toLocaleDateString(undefined,{month:'long',day:'numeric'})+', '+ev.length+' events'+(pm?', '+pm+' minutes practiced':''));
 if(ev.length){var cs=['Lesson','Performance','Practice','Important'].filter(function(t){return ev.some(function(e){return e.type===t})}).map(function(t){return COL[t]}),st=cs.map(function(c,i){return c+' '+(i*100/cs.length)+'% '+((i+1)*100/cs.length)+'%'});
 b.style.background=cs.length===1?cs[0]:'linear-gradient(90deg,'+st.join(',')+')'}
 b.onclick=function(){sel=ds;renderCal();renderDay()};c.appendChild(b)})(i)}}
 function renderDay(){
 $('#dTitle').textContent=new Date(sel+'T00:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+var dm=log[sel]||0;$('#dPrac').textContent=dm?'Practiced '+dm+' min'+(dm>=GOAL?' (goal hit)':''):'No practice logged.';
 var ul=$('#dayList');ul.textContent='';
 var ev=events.filter(function(e){return occursOn(e,sel)}).sort(function(a,b){return (a.time||'')<(b.time||'')?-1:1});
 if(!ev.length){ul.appendChild(el('li','Nothing on this day.','empty'));return}
@@ -261,7 +283,20 @@ setMail();
 document.querySelectorAll('nav button').forEach(function(b){b.onclick=function(){
 document.querySelectorAll('nav button').forEach(function(x){x.setAttribute('aria-selected',x===b)});
 ['practice','calendar','coach'].forEach(function(id){$('#'+id).hidden=id!==b.dataset.t});window.scrollTo(0,0)}});
-renderPractice();refresh();linkList(vids,'hhas-vid',$('#vList'));linkList(tracks,'hhas-trk',$('#tList'));
+function renderAll(){$('#coachMail').value=load('hhas-coach','');$('#mailMsg').textContent='';setMail();$('#reportBox').hidden=true;
+renderPractice();refresh();linkList(vids,'hhas-vid',$('#vList'));linkList(tracks,'hhas-trk',$('#tList'))}
+function renderProfiles(){var s=$('#profSel');s.textContent='';profiles.forEach(function(p){var o=el('option',p.name);o.value=p.id;s.appendChild(o)});s.value=cur;$('#profDel').disabled=profiles.length<2}
+function switchTo(id){if(timer)$('#timerBtn').onclick();cur=id;rawSave('hhas-cur',cur);weekSel=null;sel=back(0);loadAll();
+wire('#vAdd','#vT','#vU',vids,'hhas-vid','#vList');wire('#tAdd','#tT','#tU',tracks,'hhas-trk','#tList');renderProfiles();renderAll()}
+$('#profSel').onchange=function(){switchTo(this.value)};
+$('#profNew').onclick=function(){var n=(prompt('Name for the new profile?')||'').trim();if(!n)return;
+var id='p'+Date.now().toString(36);profiles.push({id:id,name:n});rawSave('hhas-profiles',profiles);switchTo(id)};
+$('#profRen').onclick=function(){var p=profiles.filter(function(x){return x.id===cur})[0],n=(prompt('Rename profile',p.name)||'').trim();if(!n)return;p.name=n;rawSave('hhas-profiles',profiles);renderProfiles()};
+$('#profDel').onclick=function(){if(profiles.length<2)return;var p=profiles.filter(function(x){return x.id===cur})[0];
+if(!confirm('Delete the profile "'+p.name+'" and all of its practice, events and links on this device?'))return;
+['hhas-log','hhas-ev','hhas-vid','hhas-trk','hhas-coach'].forEach(function(k){try{localStorage.removeItem(pk(k))}catch(e){}});
+profiles=profiles.filter(function(x){return x!==p});rawSave('hhas-profiles',profiles);switchTo(profiles[0].id)};
+renderProfiles();renderAll();
 </script>
 </body>
 </html>

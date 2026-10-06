@@ -74,10 +74,13 @@ nav button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 [hidden]{display:none!important}
 .prof{margin:0 0 20px}
 .prof label{font-weight:600}
+.prof select{min-width:150px}
 .week button.day{border:0;padding:0;min-height:0;background:none;font-weight:400}
 .week button.day.sel .dot{outline:3px solid var(--ink);outline-offset:2px}
 .cal .pm{background:var(--bg);color:var(--ink);font-size:11px;font-weight:600;padding:0 3px}
 .prac{margin:8px 0 0;font-weight:600}
+.note{margin:0 0 12px;color:var(--mute);font-size:14px}
+.note:empty{display:none}
 </style>
 </head>
 <body>
@@ -131,20 +134,25 @@ nav button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 <section id="coach" hidden>
 <div class="card">
 <h2>Email your coach</h2>
+<p class="note">"Write email" opens your email app. The address is saved on this device only.</p>
 <div class="row"><input id="coachMail" type="email" placeholder="Coach's email" aria-label="Coach email"><button id="mailBtn" class="solid">Save email</button></div>
 <div class="row" style="margin-top:8px"><a id="mailTo" class="btnlink" href="#" target="_blank" rel="noopener noreferrer">Write email</a><span id="mailMsg" role="status"></span></div>
 </div>
 <div class="card">
 <h2>Performance videos</h2>
+<p class="note">Saved on this device only. Your coach can't add or see these yet. That comes when we connect an online database.</p>
 <div class="row"><input id="vT" placeholder="Title" aria-label="Video title"><input id="vU" placeholder="Paste video link" aria-label="Video link"><button id="vAdd">Add</button></div>
+<p id="vMsg" class="note" role="status"></p>
 <ul id="vList"></ul>
 </div>
 <div class="card">
 <h2>Coach's tracks</h2>
+<p class="note">Saved on this device only. Your coach can't add or see these yet. That comes when we connect an online database.</p>
 <div class="row"><input id="tT" placeholder="Title" aria-label="Track title"><input id="tU" placeholder="Paste music link" aria-label="Track link"><button id="tAdd">Add</button></div>
+<p id="tMsg" class="note" role="status"></p>
 <ul id="tList"></ul>
 </div>
-<div class="card"><h2>Messages</h2><p class="empty">Messages from your coach will show up here in a future update.</p></div>
+<div class="card"><h2>Messages</h2><p class="empty">Messages from your coach will show up here once we connect an online database.</p></div>
 </section>
 </main>
 <nav role="tablist">
@@ -260,9 +268,12 @@ if(!arr.length){ul.appendChild(el('li','Nothing here yet.','empty'));return}
 arr.forEach(function(it,i){var li=el('li'),a=el('a',it.title);a.href=it.url;a.target='_blank';a.rel='noopener noreferrer';
 li.appendChild(a);var x=el('button','Delete','x');x.setAttribute('aria-label','Delete '+it.title);
 x.onclick=function(){arr.splice(i,1);save(key,arr);linkList(arr,key,ul,label)};li.appendChild(x);ul.appendChild(li)})}
-function wire(btn,tid,uid,arr,key,ul){$(btn).onclick=function(){var t=$(tid).value.trim(),u=$(uid).value.trim();
-if(!t||!/^https?:\/\//i.test(u))return;arr.push({title:t,url:u});save(key,arr);$(tid).value='';$(uid).value='';linkList(arr,key,$(ul))}}
-wire('#vAdd','#vT','#vU',vids,'hhas-vid','#vList');wire('#tAdd','#tT','#tU',tracks,'hhas-trk','#tList');
+function wire(btn,tid,uid,arr,key,ul,msg){$(btn).onclick=function(){var t=$(tid).value.trim(),u=$(uid).value.trim(),m=$(msg);
+if(!t){m.textContent='Add a title first.';return}
+if(!u){m.textContent='Paste a link first.';return}
+if(!/^https?:\/\//i.test(u)){if(/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(u))u='https://'+u;else{m.textContent='That doesn\'t look like a link. Copy it from the address bar or the Share button.';return}}
+arr.push({title:t,url:u});save(key,arr);$(tid).value='';$(uid).value='';m.textContent='Added.';linkList(arr,key,$(ul))}}
+wire('#vAdd','#vT','#vU',vids,'hhas-vid','#vList','#vMsg');wire('#tAdd','#tT','#tU',tracks,'hhas-trk','#tList','#tMsg');
 $('#coachMail').value=load('hhas-coach','');
 $('#report').onclick=function(){var to=load('hhas-coach',''),lines=[],tot=0;
 for(var i=6;i>=0;i--){var k=back(i),m=log[k]||0;tot+=m;lines.push(new Date(k+'T00:00').toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'})+': '+m+' min')}
@@ -275,19 +286,21 @@ $('#copyRep').onclick=function(){var ta=$('#reportText'),m=$('#copyMsg'),ok=fals
 try{ok=document.execCommand('copy')}catch(e){}
 if(ok){m.textContent='Copied. Paste it into an email.';return}
 if(navigator.clipboard){navigator.clipboard.writeText(ta.value).then(function(){m.textContent='Copied. Paste it into an email.'},function(){m.textContent='Copy was blocked. Select the text above and copy it.'})}else{m.textContent='Copy was blocked. Select the text above and copy it.'}};
-function setMail(){var m=$('#coachMail').value.trim();$('#mailTo').href=m?'mailto:'+m:'#'}
-$('#mailBtn').onclick=function(){var m=$('#coachMail').value.trim();if(!m){$('#mailMsg').textContent='Enter an email first.';return}save('hhas-coach',m);setMail();$('#mailMsg').textContent='Saved.'};
-$('#coachMail').oninput=function(){$('#mailMsg').textContent='';setMail()};
+function setMail(){var m=load('hhas-coach','');$('#mailTo').href=m?'mailto:'+m:'#'}
+$('#mailTo').onclick=function(e){if(!load('hhas-coach','')){e.preventDefault();$('#mailMsg').textContent='Save your coach\'s email first.'}};
+$('#mailBtn').onclick=function(){var m=$('#coachMail').value.trim();if(!m){$('#mailMsg').textContent='Enter an email first.';return}
+if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)){$('#mailMsg').textContent='Check the email address.';return}save('hhas-coach',m);setMail();$('#mailMsg').textContent='Saved.'};
+$('#coachMail').oninput=function(){$('#mailMsg').textContent=''};
 setMail();
 
 document.querySelectorAll('nav button').forEach(function(b){b.onclick=function(){
 document.querySelectorAll('nav button').forEach(function(x){x.setAttribute('aria-selected',x===b)});
 ['practice','calendar','coach'].forEach(function(id){$('#'+id).hidden=id!==b.dataset.t});window.scrollTo(0,0)}});
-function renderAll(){$('#coachMail').value=load('hhas-coach','');$('#mailMsg').textContent='';setMail();$('#reportBox').hidden=true;
+function renderAll(){$('#coachMail').value=load('hhas-coach','');$('#mailMsg').textContent='';$('#vMsg').textContent='';$('#tMsg').textContent='';setMail();$('#reportBox').hidden=true;
 renderPractice();refresh();linkList(vids,'hhas-vid',$('#vList'));linkList(tracks,'hhas-trk',$('#tList'))}
 function renderProfiles(){var s=$('#profSel');s.textContent='';profiles.forEach(function(p){var o=el('option',p.name);o.value=p.id;s.appendChild(o)});s.value=cur;$('#profDel').disabled=profiles.length<2}
 function switchTo(id){if(timer)$('#timerBtn').onclick();cur=id;rawSave('hhas-cur',cur);weekSel=null;sel=back(0);loadAll();
-wire('#vAdd','#vT','#vU',vids,'hhas-vid','#vList');wire('#tAdd','#tT','#tU',tracks,'hhas-trk','#tList');renderProfiles();renderAll()}
+wire('#vAdd','#vT','#vU',vids,'hhas-vid','#vList','#vMsg');wire('#tAdd','#tT','#tU',tracks,'hhas-trk','#tList','#tMsg');renderProfiles();renderAll()}
 $('#profSel').onchange=function(){switchTo(this.value)};
 $('#profNew').onclick=function(){var n=(prompt('Name for the new profile?')||'').trim();if(!n)return;
 var id='p'+Date.now().toString(36);profiles.push({id:id,name:n});rawSave('hhas-profiles',profiles);switchTo(id)};
